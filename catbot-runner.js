@@ -1,3 +1,6 @@
+var fs = require('fs');
+var WebClient = require('@slack/client').WebClient;
+
 function CatRunner() {
 	console.log("constructing.");
 
@@ -24,7 +27,7 @@ CatRunner.prototype.init = function(client, events, tok) {
 	this.token = tok;
 	this.rtm = new this.RtmClient(this.token, { logLevel: 'warning' });
 	this.sanitize = require("sanitize-filename");
-
+  this.webClient = new WebClient(tok);
 	var config = require('config');
 	var mysql = require('mysql');
 	var dbConfig = config.get('DB');
@@ -116,14 +119,26 @@ CatRunner.prototype.handleRtmMessage = function(message) {
 			var self = this;
 			var moduleStorageFactory = new this.storageFactory(this.connection, this.sanitize(moduleName));
 			handler.handle(message.user, pieces.slice(0), moduleStorageFactory,
-				function(result){
+         function(result){
 					if (result) {
+						  if (result.file) {
+                  var streamOpts = {
+                      file: fs.createReadStream(result.file),
+                      channels: message.channel
+                  };
+
+                  self.webClient.files.upload(result.filename, streamOpts, function(err, res) {
+                      if (err) {
+                          self.rtm.sendMessage("Upload nok", message.channel);
+                      };
+                  });
+						}
 						if (result.message) {
 							// TODO: allow bots to return attachments; use them here.
 							self.rtm.sendMessage(result.message, message.channel);
 						}
 					}
-			}, bareModule);
+			  }, bareModule);
 		} catch (e) {
 			console.log("Error while executing " + moduleName + ": " + e);
 		}
